@@ -97,7 +97,7 @@ export class SmartForceCyclonicConnectPlatformAccessory {
     CHARGING_STATES[this.CHARGING_CONNECTED] = this.platform.Characteristic.ChargingState.NOT_CHARGING;
     CHARGING_STATES[this.CHARGING_CHARGING] = this.platform.Characteristic.ChargingState.CHARGING;
 
-    insecureAxios.get('https://' + this.accessory.context.device.address + '/status')
+    insecureAxios.get('https://' + this.accessory.context.device.address + '/get/status')
       .then(response => {
         this.vacuumCleanerState = {
           Active: response.data.mode === this.MODE_CLEANING ?
@@ -128,7 +128,7 @@ export class SmartForceCyclonicConnectPlatformAccessory {
 
   async startCleaning(cleaning_parameter: number) {
     insecureAxios.get('https://' + this.accessory.context.device.address +
-      '/clean_start_or_continue?cleaning_parameter_set=' + cleaning_parameter)
+      '/set/clean_start_or_continue?cleaning_parameter_set=' + cleaning_parameter)
       .then(() => {
         this.vacuumCleanerState.Active = this.platform.Characteristic.Active.ACTIVE;
         this.vacuumCleanerState.RotationSpeed = this.ROTATION_SPEEDS[cleaning_parameter];
@@ -143,8 +143,22 @@ export class SmartForceCyclonicConnectPlatformAccessory {
       });
   }
 
+  async changeSpeed(cleaning_parameter: number) {
+    insecureAxios.get('https://' + this.accessory.context.device.address +
+      '/set/switch_cleaning_parameter_set?cleaning_parameter_set=' + cleaning_parameter)
+      .then(() => {
+        this.vacuumCleanerState.RotationSpeed = this.ROTATION_SPEEDS[cleaning_parameter];
+
+        this.fanService.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.vacuumCleanerState.RotationSpeed);
+
+        this.platform.log.debug('Updated RotationSpeed value: ', this.vacuumCleanerState.RotationSpeed);
+
+        this.updateStatus().then();
+      });
+  }
+
   async goHome() {
-    insecureAxios.get('https://' + this.accessory.context.device.address + '/go_home')
+    insecureAxios.get('https://' + this.accessory.context.device.address + '/set/go_home')
       .then(() => {
         this.vacuumCleanerState.Active = this.platform.Characteristic.Active.INACTIVE;
         this.vacuumCleanerState.RotationSpeed = this.ROTATION_SPEED_STOPPED;
@@ -183,11 +197,23 @@ export class SmartForceCyclonicConnectPlatformAccessory {
     if (value === this.ROTATION_SPEED_STOPPED) {
       await this.goHome();
     } else if (value > this.ROTATION_SPEED_STOPPED && value < 50) {
-      await this.startCleaning(this.CLEANING_PARAMETER_ECO);
+      if (this.vacuumCleanerState.Active === this.platform.Characteristic.Active.INACTIVE) {
+        await this.startCleaning(this.CLEANING_PARAMETER_ECO);
+      } else {
+        await this.changeSpeed(this.CLEANING_PARAMETER_ECO);
+      }
     } else if (value >= 50 && value < 75) {
-      await this.startCleaning(this.CLEANING_PARAMETER_STANDARD);
+      if (this.vacuumCleanerState.Active === this.platform.Characteristic.Active.INACTIVE) {
+        await this.startCleaning(this.CLEANING_PARAMETER_STANDARD);
+      } else {
+        await this.changeSpeed(this.CLEANING_PARAMETER_STANDARD);
+      }
     } else if (value >= 75) {
-      await this.startCleaning(this.CLEANING_PARAMETER_BOOST);
+      if (this.vacuumCleanerState.Active === this.platform.Characteristic.Active.INACTIVE) {
+        await this.startCleaning(this.CLEANING_PARAMETER_BOOST);
+      } else {
+        await this.changeSpeed(this.CLEANING_PARAMETER_BOOST);
+      }
     }
   }
 
