@@ -22,7 +22,7 @@ export class SmartForceCyclonicConnectPlatformAccessory {
     this.ROTATION_SPEED_STOPPED,
     this.ROTATION_SPEED_STANDARD,
     this.ROTATION_SPEED_ECO,
-    this.ROTATION_SPEED_BOOST
+    this.ROTATION_SPEED_BOOST,
   ];
 
   private readonly MODE_READY = 'ready';
@@ -60,7 +60,9 @@ export class SmartForceCyclonicConnectPlatformAccessory {
 
     // get the LightBulb service if it exists, otherwise create a new LightBulb service
     // you can create multiple services for each accessory
-    this.fanService = this.accessory.getService(this.platform.Service.Fanv2) || this.accessory.addService(this.platform.Service.Fanv2);
+    this.fanService = this.accessory.getService(this.platform.Service.Fanv2) ||
+      this.accessory.addService(this.platform.Service.Fanv2);
+
     this.fanService.getCharacteristic(this.platform.Characteristic.Active)
       .onGet(this.getActive.bind(this))
       .onSet(this.setActive.bind(this));
@@ -69,7 +71,9 @@ export class SmartForceCyclonicConnectPlatformAccessory {
       .onGet(this.getRotationSpeed.bind(this))
       .onSet(this.setRotationSpeed.bind(this));
 
-    this.batteryService = this.accessory.getService(this.platform.Service.Battery) || this.accessory.addService(this.platform.Service.Battery);
+    this.batteryService = this.accessory.getService(this.platform.Service.Battery) ||
+      this.accessory.addService(this.platform.Service.Battery);
+
     this.batteryService.getCharacteristic(this.platform.Characteristic.StatusLowBattery)
       .onGet(this.getStatusLowBattery.bind(this));
 
@@ -94,19 +98,19 @@ export class SmartForceCyclonicConnectPlatformAccessory {
     CHARGING_STATES[this.CHARGING_CHARGING] = this.platform.Characteristic.ChargingState.CHARGING;
 
     insecureAxios.get('https://' + this.accessory.context.device.address + '/status')
-        .then(response => {
-          this.vacuumCleanerState = {
-            Active: response.data.mode === this.MODE_CLEANING ?
-                this.platform.Characteristic.Active.ACTIVE :
-                this.platform.Characteristic.Active.INACTIVE,
-            RotationSpeed: this.ROTATION_SPEEDS[response.data.cleaning_parameter_set],
-            StatusLowBattery: response.data.battery_level < 20 ?
-                this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW :
-                this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL,
-            BatteryLevel: response.data.battery_level,
-            ChargingState: CHARGING_STATES[response.data.charging],
-          };
-        });
+      .then(response => {
+        this.vacuumCleanerState = {
+          Active: response.data.mode === this.MODE_CLEANING ?
+            this.platform.Characteristic.Active.ACTIVE :
+            this.platform.Characteristic.Active.INACTIVE,
+          RotationSpeed: this.ROTATION_SPEEDS[response.data.cleaning_parameter_set],
+          StatusLowBattery: response.data.battery_level < 20 ?
+            this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW :
+            this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL,
+          BatteryLevel: response.data.battery_level,
+          ChargingState: CHARGING_STATES[response.data.charging],
+        };
+      });
 
     // push the new values to HomeKit
     this.fanService.updateCharacteristic(this.platform.Characteristic.Active, this.vacuumCleanerState.Active);
@@ -125,7 +129,7 @@ export class SmartForceCyclonicConnectPlatformAccessory {
   async startCleaning(cleaning_parameter: number) {
     insecureAxios.get('https://' + this.accessory.context.device.address +
       '/clean_start_or_continue?cleaning_parameter_set=' + cleaning_parameter)
-      .then(response => {
+      .then(() => {
         this.vacuumCleanerState.Active = this.platform.Characteristic.Active.ACTIVE;
         this.vacuumCleanerState.RotationSpeed = this.ROTATION_SPEEDS[cleaning_parameter];
 
@@ -141,7 +145,7 @@ export class SmartForceCyclonicConnectPlatformAccessory {
 
   async goHome() {
     insecureAxios.get('https://' + this.accessory.context.device.address + '/go_home')
-      .then(response => {
+      .then(() => {
         this.vacuumCleanerState.Active = this.platform.Characteristic.Active.INACTIVE;
         this.vacuumCleanerState.RotationSpeed = this.ROTATION_SPEED_STOPPED;
 

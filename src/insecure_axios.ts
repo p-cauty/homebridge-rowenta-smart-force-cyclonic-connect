@@ -4,5 +4,5 @@ import * as https from 'https';
 export const insecureAxios = axios.create({
   httpsAgent: new https.Agent({
     rejectUnauthorized: false,
-  })
+  }),
 });
