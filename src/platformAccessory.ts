@@ -1,141 +1,202 @@
-import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
+import {Service, PlatformAccessory, CharacteristicValue, Characteristic} from 'homebridge';
 
-import { ExampleHomebridgePlatform } from './platform';
+import { SmartForceCyclonicConnectHomebridgePlatform } from './platform';
+import {insecureAxios} from "./insecure_axios";
+import {match} from "assert";
 
 /**
  * Platform Accessory
  * An instance of this class is created for each accessory your platform registers
  * Each accessory may expose multiple services of different service types.
  */
-export class ExamplePlatformAccessory {
-  private service: Service;
+export class SmartForceCyclonicConnectPlatformAccessory {
+  private readonly CLEANING_PARAMETER_ECO = 2;
+  private readonly CLEANING_PARAMETER_STANDARD = 1;
+  private readonly CLEANING_PARAMETER_BOOST = 3;
+
+  private readonly ROTATION_SPEED_STOPPED = 0;
+  private readonly ROTATION_SPEED_ECO = 33;
+  private readonly ROTATION_SPEED_STANDARD = 66;
+  private readonly ROTATION_SPEED_BOOST = 100;
+
+  private readonly ROTATION_SPEEDS = [
+    this.ROTATION_SPEED_STOPPED,
+    this.ROTATION_SPEED_STANDARD,
+    this.ROTATION_SPEED_ECO,
+    this.ROTATION_SPEED_BOOST
+  ];
+
+  private readonly MODE_READY = 'ready';
+  private readonly MODE_CLEANING = 'cleaning';
+  private readonly MODE_GO_GOME = 'go_home';
+
+  private readonly CHARGING_UNCONNECTED = 'unconnected';
+  private readonly CHARGING_CONNECTED = 'connected';
+  private readonly CHARGING_CHARGING = 'charging';
+
+  private fanService: Service;
+  private batteryService: Service;
 
   /**
    * These are just used to create a working example
    * You should implement your own code to track the state of your accessory
    */
-  private exampleStates = {
-    On: false,
-    Brightness: 100,
+  private vacuumCleanerState = {
+    Active: this.platform.Characteristic.Active.INACTIVE,
+    RotationSpeed: this.ROTATION_SPEED_STANDARD,
+    StatusLowBattery: this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL,
+    BatteryLevel: 100,
+    ChargingState: this.platform.Characteristic.ChargingState.NOT_CHARGING,
   };
 
   constructor(
-    private readonly platform: ExampleHomebridgePlatform,
+    private readonly platform: SmartForceCyclonicConnectHomebridgePlatform,
     private readonly accessory: PlatformAccessory,
   ) {
-
     // set accessory information
     this.accessory.getService(this.platform.Service.AccessoryInformation)!
-      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Default-Manufacturer')
-      .setCharacteristic(this.platform.Characteristic.Model, 'Default-Model')
+      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Rowenta')
+      .setCharacteristic(this.platform.Characteristic.Model, 'Smart Force Cyclonic Connect')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, 'Default-Serial');
 
     // get the LightBulb service if it exists, otherwise create a new LightBulb service
     // you can create multiple services for each accessory
-    this.service = this.accessory.getService(this.platform.Service.Lightbulb) || this.accessory.addService(this.platform.Service.Lightbulb);
+    this.fanService = this.accessory.getService(this.platform.Service.Fanv2) || this.accessory.addService(this.platform.Service.Fanv2);
+    this.fanService.getCharacteristic(this.platform.Characteristic.Active)
+      .onGet(this.getActive.bind(this))
+      .onSet(this.setActive.bind(this));
 
-    // set the service name, this is what is displayed as the default name on the Home app
-    // in this example we are using the name we stored in the `accessory.context` in the `discoverDevices` method.
-    this.service.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.exampleDisplayName);
+    this.fanService.getCharacteristic(this.platform.Characteristic.RotationSpeed)
+      .onGet(this.getRotationSpeed.bind(this))
+      .onSet(this.setRotationSpeed.bind(this));
 
-    // each service must implement at-minimum the "required characteristics" for the given service type
-    // see https://developers.homebridge.io/#/service/Lightbulb
+    this.batteryService = this.accessory.getService(this.platform.Service.Battery) || this.accessory.addService(this.platform.Service.Battery);
+    this.batteryService.getCharacteristic(this.platform.Characteristic.StatusLowBattery)
+      .onGet(this.getStatusLowBattery.bind(this));
 
-    // register handlers for the On/Off Characteristic
-    this.service.getCharacteristic(this.platform.Characteristic.On)
-      .onSet(this.setOn.bind(this))                // SET - bind to the `setOn` method below
-      .onGet(this.getOn.bind(this));               // GET - bind to the `getOn` method below
+    this.batteryService.getCharacteristic(this.platform.Characteristic.BatteryLevel)
+      .onGet(this.getBatteryLevel.bind(this));
 
-    // register handlers for the Brightness Characteristic
-    this.service.getCharacteristic(this.platform.Characteristic.Brightness)
-      .onSet(this.setBrightness.bind(this));       // SET - bind to the 'setBrightness` method below
-
-    /**
-     * Creating multiple services of the same type.
-     *
-     * To avoid "Cannot add a Service with the same UUID another Service without also defining a unique 'subtype' property." error,
-     * when creating multiple services of the same type, you need to use the following syntax to specify a name and subtype id:
-     * this.accessory.getService('NAME') || this.accessory.addService(this.platform.Service.Lightbulb, 'NAME', 'USER_DEFINED_SUBTYPE_ID');
-     *
-     * The USER_DEFINED_SUBTYPE must be unique to the platform accessory (if you platform exposes multiple accessories, each accessory
-     * can use the same sub type id.)
-     */
-
-    // Example: add two "motion sensor" services to the accessory
-    const motionSensorOneService = this.accessory.getService('Motion Sensor One Name') ||
-      this.accessory.addService(this.platform.Service.MotionSensor, 'Motion Sensor One Name', 'YourUniqueIdentifier-1');
-
-    const motionSensorTwoService = this.accessory.getService('Motion Sensor Two Name') ||
-      this.accessory.addService(this.platform.Service.MotionSensor, 'Motion Sensor Two Name', 'YourUniqueIdentifier-2');
+    this.batteryService.getCharacteristic(this.platform.Characteristic.ChargingState)
+      .onGet(this.getChargingState.bind(this));
 
     /**
      * Updating characteristics values asynchronously.
-     *
-     * Example showing how to update the state of a Characteristic asynchronously instead
-     * of using the `on('get')` handlers.
-     * Here we change update the motion sensor trigger states on and off every 10 seconds
-     * the `updateCharacteristic` method.
-     *
      */
-    let motionDetected = false;
     setInterval(() => {
-      // EXAMPLE - inverse the trigger
-      motionDetected = !motionDetected;
-
-      // push the new value to HomeKit
-      motionSensorOneService.updateCharacteristic(this.platform.Characteristic.MotionDetected, motionDetected);
-      motionSensorTwoService.updateCharacteristic(this.platform.Characteristic.MotionDetected, !motionDetected);
-
-      this.platform.log.debug('Triggering motionSensorOneService:', motionDetected);
-      this.platform.log.debug('Triggering motionSensorTwoService:', !motionDetected);
-    }, 10000);
+      this.updateStatus().then();
+    }, 30000);
   }
 
-  /**
-   * Handle "SET" requests from HomeKit
-   * These are sent when the user changes the state of an accessory, for example, turning on a Light bulb.
-   */
-  async setOn(value: CharacteristicValue) {
-    // implement your own code to turn your device on/off
-    this.exampleStates.On = value as boolean;
+  async updateStatus() {
+    const CHARGING_STATES = {};
+    CHARGING_STATES[this.CHARGING_UNCONNECTED] = this.platform.Characteristic.ChargingState.NOT_CHARGEABLE;
+    CHARGING_STATES[this.CHARGING_CONNECTED] = this.platform.Characteristic.ChargingState.NOT_CHARGING;
+    CHARGING_STATES[this.CHARGING_CHARGING] = this.platform.Characteristic.ChargingState.CHARGING;
 
-    this.platform.log.debug('Set Characteristic On ->', value);
+    insecureAxios.get('https://' + this.accessory.context.device.address + '/status')
+        .then(response => {
+          this.vacuumCleanerState = {
+            Active: response.data.mode === this.MODE_CLEANING ?
+                this.platform.Characteristic.Active.ACTIVE :
+                this.platform.Characteristic.Active.INACTIVE,
+            RotationSpeed: this.ROTATION_SPEEDS[response.data.cleaning_parameter_set],
+            StatusLowBattery: response.data.battery_level < 20 ?
+                this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW :
+                this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL,
+            BatteryLevel: response.data.battery_level,
+            ChargingState: CHARGING_STATES[response.data.charging],
+          };
+        });
+
+    // push the new values to HomeKit
+    this.fanService.updateCharacteristic(this.platform.Characteristic.Active, this.vacuumCleanerState.Active);
+    this.fanService.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.vacuumCleanerState.RotationSpeed);
+    this.batteryService.updateCharacteristic(this.platform.Characteristic.StatusLowBattery, this.vacuumCleanerState.StatusLowBattery);
+    this.batteryService.updateCharacteristic(this.platform.Characteristic.BatteryLevel, this.vacuumCleanerState.BatteryLevel);
+    this.batteryService.updateCharacteristic(this.platform.Characteristic.ChargingState, this.vacuumCleanerState.ChargingState);
+
+    this.platform.log.debug('Updated Active value: ', this.vacuumCleanerState.Active);
+    this.platform.log.debug('Updated RotationSpeed value: ', this.vacuumCleanerState.RotationSpeed);
+    this.platform.log.debug('Updated StatusLowBattery value: ', this.vacuumCleanerState.StatusLowBattery);
+    this.platform.log.debug('Updated BatteryLevel value: ', this.vacuumCleanerState.BatteryLevel);
+    this.platform.log.debug('Updated ChargingState value: ', this.vacuumCleanerState.ChargingState);
   }
 
-  /**
-   * Handle the "GET" requests from HomeKit
-   * These are sent when HomeKit wants to know the current state of the accessory, for example, checking if a Light bulb is on.
-   *
-   * GET requests should return as fast as possbile. A long delay here will result in
-   * HomeKit being unresponsive and a bad user experience in general.
-   *
-   * If your device takes time to respond you should update the status of your device
-   * asynchronously instead using the `updateCharacteristic` method instead.
+  async startCleaning(cleaning_parameter: number) {
+    insecureAxios.get('https://' + this.accessory.context.device.address +
+      '/clean_start_or_continue?cleaning_parameter_set=' + cleaning_parameter)
+      .then(response => {
+        this.vacuumCleanerState.Active = this.platform.Characteristic.Active.ACTIVE;
+        this.vacuumCleanerState.RotationSpeed = this.ROTATION_SPEEDS[cleaning_parameter];
 
-   * @example
-   * this.service.updateCharacteristic(this.platform.Characteristic.On, true)
-   */
-  async getOn(): Promise<CharacteristicValue> {
-    // implement your own code to check if the device is on
-    const isOn = this.exampleStates.On;
+        this.fanService.updateCharacteristic(this.platform.Characteristic.Active, this.vacuumCleanerState.Active);
+        this.fanService.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.vacuumCleanerState.RotationSpeed);
 
-    this.platform.log.debug('Get Characteristic On ->', isOn);
+        this.platform.log.debug('Updated Active value: ', this.vacuumCleanerState.Active);
+        this.platform.log.debug('Updated RotationSpeed value: ', this.vacuumCleanerState.RotationSpeed);
 
-    // if you need to return an error to show the device as "Not Responding" in the Home app:
-    // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
-
-    return isOn;
+        this.updateStatus().then();
+      });
   }
 
-  /**
-   * Handle "SET" requests from HomeKit
-   * These are sent when the user changes the state of an accessory, for example, changing the Brightness
-   */
-  async setBrightness(value: CharacteristicValue) {
-    // implement your own code to set the brightness
-    this.exampleStates.Brightness = value as number;
+  async goHome() {
+    insecureAxios.get('https://' + this.accessory.context.device.address + '/go_home')
+      .then(response => {
+        this.vacuumCleanerState.Active = this.platform.Characteristic.Active.INACTIVE;
+        this.vacuumCleanerState.RotationSpeed = this.ROTATION_SPEED_STOPPED;
 
-    this.platform.log.debug('Set Characteristic Brightness -> ', value);
+        this.fanService.updateCharacteristic(this.platform.Characteristic.Active, this.vacuumCleanerState.Active);
+        this.fanService.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.vacuumCleanerState.RotationSpeed);
+
+        this.platform.log.debug('Updated Active value: ', this.vacuumCleanerState.Active);
+        this.platform.log.debug('Updated RotationSpeed value: ', this.vacuumCleanerState.RotationSpeed);
+
+        this.updateStatus().then();
+      });
   }
 
+  async getActive(): Promise<CharacteristicValue> {
+    return this.vacuumCleanerState.Active;
+  }
+
+  async setActive(value: CharacteristicValue) {
+    switch (value) {
+      case this.platform.Characteristic.Active.ACTIVE:
+        await this.startCleaning(this.CLEANING_PARAMETER_STANDARD);
+        break;
+
+      case this.platform.Characteristic.Active.INACTIVE:
+        await this.goHome();
+        break;
+    }
+  }
+
+  async getRotationSpeed(): Promise<CharacteristicValue> {
+    return this.vacuumCleanerState.RotationSpeed;
+  }
+
+  async setRotationSpeed(value: CharacteristicValue) {
+    if (value === this.ROTATION_SPEED_STOPPED) {
+      await this.goHome();
+    } else if (value > this.ROTATION_SPEED_STOPPED && value < 50) {
+      await this.startCleaning(this.CLEANING_PARAMETER_ECO);
+    } else if (value >= 50 && value < 75) {
+      await this.startCleaning(this.CLEANING_PARAMETER_STANDARD);
+    } else if (value >= 75) {
+      await this.startCleaning(this.CLEANING_PARAMETER_BOOST);
+    }
+  }
+
+  async getStatusLowBattery(): Promise<CharacteristicValue> {
+    return this.vacuumCleanerState.StatusLowBattery;
+  }
+
+  async getBatteryLevel(): Promise<CharacteristicValue> {
+    return this.vacuumCleanerState.BatteryLevel;
+  }
+
+  async getChargingState(): Promise<CharacteristicValue> {
+    return this.vacuumCleanerState.ChargingState;
+  }
 }

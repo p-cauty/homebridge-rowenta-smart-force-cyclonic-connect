@@ -1,15 +1,32 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
+  "pluginAlias": "RowentaSmartForceCyclonicConnect",
   "pluginType": "platform",
   "singular": true,
   "schema": {
     "type": "object",
     "properties": {
-      "name": {
-        "title": "Name",
-        "type": "string",
+      "vacuum_cleaners": {
+        "title": "Vacuum cleaners",
+        "type": "array",
         "required": true,
-        "default": "Example Dynamic Platform"
+        "uniqueItems": true,
+        "default": "A list of compatibles vacuum cleaners",
+        "items": {
+          "title": "Vacuum cleaners",
+          "type": "object",
+          "properties": {
+            "address": {
+              "title": "IP address",
+              "type": "string",
+              "required": true
+            },
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "required": true
+            }
+          }
+        }
       }
     }
   }
