@@ -1,8 +1,7 @@
-import {Service, PlatformAccessory, CharacteristicValue, Characteristic} from 'homebridge';
+import {Service, PlatformAccessory, CharacteristicValue} from 'homebridge';
 
 import { SmartForceCyclonicConnectHomebridgePlatform } from './platform';
-import {insecureAxios} from "./insecure_axios";
-import {match} from "assert";
+import {insecureAxios} from './insecure_axios';
 
 /**
  * Platform Accessory

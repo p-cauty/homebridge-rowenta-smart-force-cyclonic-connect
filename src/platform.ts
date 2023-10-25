@@ -6,7 +6,7 @@ import {
   Logger,
   PlatformAccessory,
   PlatformConfig,
-  Service
+  Service,
 } from 'homebridge';
 
 import {PLATFORM_NAME, PLUGIN_NAME} from './settings';
