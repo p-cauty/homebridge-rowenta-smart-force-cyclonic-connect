@@ -2,7 +2,7 @@
   "private": true,
   "displayName": "Rowenta Smart Force Cyclonic Connect",
   "name": "homebridge-rowenta-smart-force-cyclonic-connect",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Add support for \"Smart Force Cyclonic Connect\" robot vacuum cleaner from Rowenta (SEB)",
   "license": "MIT",
   "repository": {
