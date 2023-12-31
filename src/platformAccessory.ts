@@ -98,31 +98,31 @@ export class SmartForceCyclonicConnectPlatformAccessory {
     CHARGING_STATES[this.CHARGING_CONNECTED] = this.platform.Characteristic.ChargingState.NOT_CHARGING;
     CHARGING_STATES[this.CHARGING_CHARGING] = this.platform.Characteristic.ChargingState.CHARGING;
 
-      insecureAxios.get('https://' + this.accessory.context.device.address + '/get/status')
-        .then(response => {
-          this.vacuumCleanerState = {
-            Active: response.data.mode === this.MODE_CLEANING ?
-              this.platform.Characteristic.Active.ACTIVE :
-              this.platform.Characteristic.Active.INACTIVE,
-            RotationSpeed: this.ROTATION_SPEEDS[response.data.cleaning_parameter_set],
-            StatusLowBattery: response.data.battery_level < 20 ?
-              this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW :
-              this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL,
-            BatteryLevel: response.data.battery_level,
-            ChargingState: CHARGING_STATES[response.data.charging],
-          };
-        })
-        .catch(error => {
-          this.vacuumCleanerState = {
-            Active: this.platform.Characteristic.Active.INACTIVE,
-            RotationSpeed: this.ROTATION_SPEED_STOPPED,
-            StatusLowBattery: this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW,
-            BatteryLevel: 0,
-            ChargingState: this.platform.Characteristic.ChargingState.NOT_CHARGING,
-          }
+    insecureAxios.get('https://' + this.accessory.context.device.address + '/get/status')
+      .then(response => {
+        this.vacuumCleanerState = {
+          Active: response.data.mode === this.MODE_CLEANING ?
+            this.platform.Characteristic.Active.ACTIVE :
+            this.platform.Characteristic.Active.INACTIVE,
+          RotationSpeed: this.ROTATION_SPEEDS[response.data.cleaning_parameter_set],
+          StatusLowBattery: response.data.battery_level < 20 ?
+            this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW :
+            this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL,
+          BatteryLevel: response.data.battery_level,
+          ChargingState: CHARGING_STATES[response.data.charging],
+        };
+      })
+      .catch(error => {
+        this.vacuumCleanerState = {
+          Active: this.platform.Characteristic.Active.INACTIVE,
+          RotationSpeed: this.ROTATION_SPEED_STOPPED,
+          StatusLowBattery: this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW,
+          BatteryLevel: 0,
+          ChargingState: this.platform.Characteristic.ChargingState.NOT_CHARGING,
+        };
 
-          this.platform.log.error('Failed to update status: ', error.toJSON());
-        });
+        this.platform.log.error('Failed to update status: ', error.toJSON());
+      });
 
     // push the new values to HomeKit
     this.fanService.updateCharacteristic(this.platform.Characteristic.Active, this.vacuumCleanerState.Active);
