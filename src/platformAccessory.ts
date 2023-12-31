@@ -25,6 +25,7 @@ export class SmartForceCyclonicConnectPlatformAccessory {
     this.ROTATION_SPEED_BOOST,
   ];
 
+  private readonly MODE_NOT_READY = 'not_ready';
   private readonly MODE_READY = 'ready';
   private readonly MODE_CLEANING = 'cleaning';
   private readonly MODE_GO_GOME = 'go_home';
@@ -88,7 +89,7 @@ export class SmartForceCyclonicConnectPlatformAccessory {
      */
     setInterval(() => {
       this.updateStatus().then();
-    }, 30000);
+    }, 5000);
   }
 
   async updateStatus() {
@@ -97,20 +98,31 @@ export class SmartForceCyclonicConnectPlatformAccessory {
     CHARGING_STATES[this.CHARGING_CONNECTED] = this.platform.Characteristic.ChargingState.NOT_CHARGING;
     CHARGING_STATES[this.CHARGING_CHARGING] = this.platform.Characteristic.ChargingState.CHARGING;
 
-    insecureAxios.get('https://' + this.accessory.context.device.address + '/get/status')
-      .then(response => {
-        this.vacuumCleanerState = {
-          Active: response.data.mode === this.MODE_CLEANING ?
-            this.platform.Characteristic.Active.ACTIVE :
-            this.platform.Characteristic.Active.INACTIVE,
-          RotationSpeed: this.ROTATION_SPEEDS[response.data.cleaning_parameter_set],
-          StatusLowBattery: response.data.battery_level < 20 ?
-            this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW :
-            this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL,
-          BatteryLevel: response.data.battery_level,
-          ChargingState: CHARGING_STATES[response.data.charging],
-        };
-      });
+      insecureAxios.get('https://' + this.accessory.context.device.address + '/get/status')
+        .then(response => {
+          this.vacuumCleanerState = {
+            Active: response.data.mode === this.MODE_CLEANING ?
+              this.platform.Characteristic.Active.ACTIVE :
+              this.platform.Characteristic.Active.INACTIVE,
+            RotationSpeed: this.ROTATION_SPEEDS[response.data.cleaning_parameter_set],
+            StatusLowBattery: response.data.battery_level < 20 ?
+              this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW :
+              this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL,
+            BatteryLevel: response.data.battery_level,
+            ChargingState: CHARGING_STATES[response.data.charging],
+          };
+        })
+        .catch(error => {
+          this.vacuumCleanerState = {
+            Active: this.platform.Characteristic.Active.INACTIVE,
+            RotationSpeed: this.ROTATION_SPEED_STOPPED,
+            StatusLowBattery: this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW,
+            BatteryLevel: 0,
+            ChargingState: this.platform.Characteristic.ChargingState.NOT_CHARGING,
+          }
+
+          this.platform.log.error('Failed to update status: ', error.toJSON());
+        });
 
     // push the new values to HomeKit
     this.fanService.updateCharacteristic(this.platform.Characteristic.Active, this.vacuumCleanerState.Active);
@@ -130,47 +142,41 @@ export class SmartForceCyclonicConnectPlatformAccessory {
     insecureAxios.get('https://' + this.accessory.context.device.address +
       '/set/clean_start_or_continue?cleaning_parameter_set=' + cleaning_parameter)
       .then(() => {
-        this.vacuumCleanerState.Active = this.platform.Characteristic.Active.ACTIVE;
-        this.vacuumCleanerState.RotationSpeed = this.ROTATION_SPEEDS[cleaning_parameter];
-
-        this.fanService.updateCharacteristic(this.platform.Characteristic.Active, this.vacuumCleanerState.Active);
-        this.fanService.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.vacuumCleanerState.RotationSpeed);
-
         this.platform.log.debug('Updated Active value: ', this.vacuumCleanerState.Active);
         this.platform.log.debug('Updated RotationSpeed value: ', this.vacuumCleanerState.RotationSpeed);
-
-        this.updateStatus().then();
+      })
+      .catch(error => {
+        this.platform.log.error('Failed to start cleaning: ', error.toJSON());
       });
+
+    this.updateStatus().then();
   }
 
   async changeSpeed(cleaning_parameter: number) {
     insecureAxios.get('https://' + this.accessory.context.device.address +
       '/set/switch_cleaning_parameter_set?cleaning_parameter_set=' + cleaning_parameter)
       .then(() => {
-        this.vacuumCleanerState.RotationSpeed = this.ROTATION_SPEEDS[cleaning_parameter];
-
-        this.fanService.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.vacuumCleanerState.RotationSpeed);
-
         this.platform.log.debug('Updated RotationSpeed value: ', this.vacuumCleanerState.RotationSpeed);
-
-        this.updateStatus().then();
+      })
+      .catch(error => {
+        this.platform.log.error('Failed to start cleaning: ', error.toJSON());
       });
+
+    this.updateStatus().then();
   }
 
   async goHome() {
     insecureAxios.get('https://' + this.accessory.context.device.address + '/set/go_home')
       .then(() => {
-        this.vacuumCleanerState.Active = this.platform.Characteristic.Active.INACTIVE;
-        this.vacuumCleanerState.RotationSpeed = this.ROTATION_SPEED_STOPPED;
-
-        this.fanService.updateCharacteristic(this.platform.Characteristic.Active, this.vacuumCleanerState.Active);
-        this.fanService.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.vacuumCleanerState.RotationSpeed);
-
         this.platform.log.debug('Updated Active value: ', this.vacuumCleanerState.Active);
         this.platform.log.debug('Updated RotationSpeed value: ', this.vacuumCleanerState.RotationSpeed);
 
-        this.updateStatus().then();
+      })
+      .catch(error => {
+        this.platform.log.error('Failed to start cleaning: ', error.toJSON());
       });
+
+    this.updateStatus().then();
   }
 
   async getActive(): Promise<CharacteristicValue> {
